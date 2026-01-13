@@ -1,0 +1,30 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+jinja2 = "*"
+python-multipart = "*"
+fastapi = "*"
+uvicorn = "*"
+sqlalchemy = "*"
+python-dotenv = "*"
+jose = "*"
+pyjwt = "*"
+pillow = "*"
+stripe = "*"
+psycopg = {extras = ["binary"], version = "*"}
+alembic = "*"
+psycopg2-binary = "*"
+pydantic = "*"
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = {extras = ["bcrypt"], version = "*"}
+supabase = "*"
+
+[dev-packages]
+pytest = "*"
+httpx = "*"
+
+[requires]
+python_version = "3.13"
