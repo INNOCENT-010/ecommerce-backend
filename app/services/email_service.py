@@ -1,4 +1,4 @@
-# app/services/email_service.py
+# app/services/email_service.py - UPDATED TO USE SETTINGS
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -6,17 +6,22 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
+from jinja2 import Template
+
+# Import your settings
+from app.core.config import settings  # Adjust import path as needed
 
 logger = logging.getLogger(__name__)
 
 class EmailService:
     def __init__(self):
-        self.smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", 587))
-        self.smtp_user = os.getenv("SMTP_USER")
-        self.smtp_password = os.getenv("SMTP_PASSWORD")
-        self.from_name = os.getenv("SMTP_FROM_NAME", "BLOOM&G Store")
-        self.from_email = os.getenv("SMTP_FROM_EMAIL", "noreply@bloomg.com")
+        # Use settings instead of os.getenv()
+        self.smtp_host = settings.SMTP_HOST
+        self.smtp_port = settings.SMTP_PORT  # This will be 465
+        self.smtp_user = settings.SMTP_USER
+        self.smtp_password = settings.SMTP_PASSWORD
+        self.from_name = "BLOOM&G Store"  # Hardcode or add to settings
+        self.from_email = "noreply@bloomg.com"  # Hardcode or add to settings
         
     def send_email(
         self,
@@ -28,7 +33,12 @@ class EmailService:
         try:
             if not self.smtp_user or not self.smtp_password:
                 logger.warning("SMTP credentials not configured. Email will not be sent.")
+                print(f"⚠️ SMTP credentials missing. Would send email to {to_email} with subject: {subject}")
                 return False
+            
+            print(f"📧 Attempting to send email via port {self.smtp_port}...")
+            print(f"  To: {to_email}")
+            print(f"  From: {self.from_name} <{self.from_email}>")
             
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
@@ -39,17 +49,164 @@ class EmailService:
                 msg.attach(MIMEText(text_content, 'plain'))
             msg.attach(MIMEText(html_content, 'html'))
             
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            # Use SMTP_SSL for port 465
+            if self.smtp_port == 465:
+                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as server:
+                    print(f"🔐 Using SSL encryption (port 465)...")
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+            else:
+                # Fallback to port 587 with STARTTLS
+                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                    print(f"🔐 Using STARTTLS (port {self.smtp_port})...")
+                    server.starttls()
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
             
             logger.info(f"Email sent to {to_email}")
+            print(f"✅ Email sent successfully to {to_email}")
             return True
             
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            print(f"❌ Failed to send email to {to_email}: {str(e)}")
             return False
+    
+    def send_verification_code(self, to_email: str, code: str) -> bool:
+        """Send verification code email"""
+        html_template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verification Code - BLOOM&G</title>
+            <style>
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    margin: 0;
+                    padding: 0;
+                    background-color: #f5f5f5;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: white;
+                    border-radius: 10px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                }
+                .header {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                }
+                .logo {
+                    font-size: 28px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                }
+                .content {
+                    padding: 40px;
+                }
+                .code-box {
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                    padding: 30px;
+                    margin: 20px 0;
+                    text-align: center;
+                    border: 2px dashed #667eea;
+                }
+                .verification-code {
+                    font-size: 36px;
+                    font-weight: bold;
+                    color: #667eea;
+                    letter-spacing: 8px;
+                    margin: 20px 0;
+                }
+                .footer {
+                    text-align: center;
+                    padding: 20px;
+                    background: #f8f9fa;
+                    color: #666;
+                    font-size: 14px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">BLOOM&G</div>
+                    <h1>Your Verification Code</h1>
+                    <p>Use this code to complete your sign in</p>
+                </div>
+                
+                <div class="content">
+                    <p>Hello,</p>
+                    <p>You requested a verification code to sign in to BLOOM&G.</p>
+                    
+                    <div class="code-box">
+                        <p>Your 6-digit verification code is:</p>
+                        <div class="verification-code">{{ code }}</div>
+                        <p>This code will expire in 10 minutes.</p>
+                    </div>
+                    
+                    <p>If you didn't request this code, please ignore this email.</p>
+                    <p>For security reasons, do not share this code with anyone.</p>
+                    
+                    <p>Best regards,<br>The BLOOM&G Team</p>
+                </div>
+                
+                <div class="footer">
+                    <p>©️ 2024 BLOOM&G Store. All rights reserved.</p>
+                    <p>123 Fashion Street, Lagos, Nigeria</p>
+                    <p>Need help? Contact us at support@bloomg.com</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_template = """
+        Verification Code - BLOOM&G
+        
+        Hello,
+        
+        You requested a verification code to sign in to BLOOM&G.
+        
+        Your 6-digit verification code is:
+        
+        {{ code }}
+        
+        This code will expire in 10 minutes.
+        
+        If you didn't request this code, please ignore this email.
+        For security reasons, do not share this code with anyone.
+        
+        Best regards,
+        The BLOOM&G Team
+        
+        ©️ 2024 BLOOM&G Store. All rights reserved.
+        123 Fashion Street, Lagos, Nigeria
+        Need help? Contact us at support@bloomg.com
+        """
+        
+        template_data = {
+            'code': code
+        }
+        
+        html_content = Template(html_template).render(**template_data)
+        text_content = Template(text_template).render(**template_data)
+        
+        subject = f"Your BLOOM&G Verification Code: {code}"
+        
+        # Print for debugging
+        print(f"📧 Sending verification code to {to_email}: {code}")
+        
+        return self.send_email(to_email, subject, html_content, text_content)
     
     def send_order_confirmation(
         self,
@@ -222,8 +379,6 @@ class EmailService:
         ©️ 2024 BLOOM&G Store. All rights reserved.
         123 Fashion Street, Lagos, Nigeria
         """
-        
-        from jinja2 import Template
         
         template_data = {
             'customer_name': customer_name,

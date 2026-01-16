@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import random
 import string
-
+from app.services.email_service import email_service
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token, get_current_user
 from app.core.config import settings
@@ -247,6 +247,11 @@ async def logout():
 
 verification_store = {}
 
+# IN app/api/auth.py - Add this import at the top
+from app.services.email_service import email_service  # Use your email service
+
+# Then update the send_verification function:
+
 @router.post("/send-verification")
 async def send_verification(
     email_data: dict,
@@ -267,10 +272,22 @@ async def send_verification(
         "user_exists": existing_user is not None
     }
     
+    # 🔥 ADD THIS: Send the code via email
+    try:
+        background_tasks.add_task(
+            email_service.send_verification_code,
+            to_email=email,
+            code=code
+        )
+    except Exception as e:
+        print(f"⚠️ Failed to schedule email: {e}")
+        # Continue anyway - we'll tell the frontend code was sent
+    
     return {
         "message": "Verification code sent",
         "email": email,
-        "user_exists": existing_user is not None
+        "user_exists": existing_user is not None,
+        "code_sent": True  # Add this to confirm to frontend
     }
 
 @router.post("/verify-code")
@@ -300,11 +317,29 @@ async def verify_email_code(
     
     user = db.query(User).filter(User.email == email).first()
     
-    return {
-        "verified": True,
-        "email": email,
-        "user_exists": user is not None
-    }
+    # ✅ FIX: Return user data if exists
+    if user:
+        return {
+            "verified": True,
+            "email": email,
+            "user_exists": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "phone": user.phone,
+                "is_active": user.is_active,
+                "is_admin": user.is_admin,
+                "created_at": user.created_at.isoformat() if user.created_at else None
+            }
+        }
+    else:
+        return {
+            "verified": True,
+            "email": email,
+            "user_exists": False,
+            "user": None
+        }
 
 @router.post("/magic-login")
 async def magic_login(

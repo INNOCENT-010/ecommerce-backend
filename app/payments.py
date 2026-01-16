@@ -621,10 +621,11 @@ async def verify_payment(
                 "data": None
             }
         
+        # FIXED: Removed commas that were creating tuples
         if data["status"] == "success":
-            order.status = "processing",
-            order.payment_status = "paid",
-            order.paystack_transaction_id = data["id"],
+            order.status = "processing"
+            order.payment_status = "paid"
+            order.paystack_transaction_id = data["id"]
             order.paid_at = datetime.now()
             
             update_product_stock_on_order(db, order.id)
@@ -740,6 +741,7 @@ def handle_successful_payment(data: Dict[str, Any], db: Session):
         if not order:
             return
         
+        # FIXED: Removed commas that were creating tuples
         order.status = "processing"
         order.payment_status = "paid"
         order.paystack_transaction_id = data.get("id")
@@ -853,6 +855,7 @@ async def get_order(
     
     return order
 
+
 @router.get("/user/{user_id}/orders")
 async def get_user_orders(
     user_id: int,
@@ -905,3 +908,114 @@ async def get_user_orders(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch user orders: {str(e)}"
         )
+
+@router.post("/send-order-email")
+async def send_order_email(
+    request_data: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    try:
+        order_number = request_data.get("order_number")
+        email = request_data.get("email")
+        customer_name = request_data.get("customer_name", "Customer")
+        
+        if not order_number or not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Order number and email are required"
+            )
+        
+        order = db.query(Order).filter(Order.order_number == order_number).first()
+        
+        if not order:
+            order_data = {
+                'order_number': order_number,
+                'order_date': datetime.now().strftime('%B %d, %Y'),
+                'status': 'Processing',
+                'payment_status': 'Paid',
+                'shipping_address': 'Address will be confirmed shortly',
+                'items': [{'name': 'Your Order', 'quantity': 1, 'price': request_data.get('total_amount', 0)}],
+                'total_amount': request_data.get('total_amount', 0)
+            }
+        else:
+            shipping_address = db.query(Address).filter(Address.id == order.shipping_address_id).first()
+            shipping_address_str = ""
+            if shipping_address:
+                shipping_address_str = f"{shipping_address.street}, {shipping_address.city}, {shipping_address.state}, {shipping_address.country}"
+            
+            order_items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+            
+            order_data = {
+                'order_number': order.order_number,
+                'order_date': order.created_at.strftime('%B %d, %Y') if order.created_at else datetime.now().strftime('%B %d, %Y'),
+                'status': order.status,
+                'payment_status': order.payment_status,
+                'shipping_address': shipping_address_str,
+                'items': [
+                    {
+                        'name': item.product_name,
+                        'quantity': item.quantity,
+                        'price': float(item.price)
+                    }
+                    for item in order_items
+                ],
+                'total_amount': float(order.total_amount)
+            }
+        
+        background_tasks.add_task(
+            email_service.send_order_confirmation,
+            to_email=email,
+            order_data=order_data,
+            customer_name=customer_name
+        )
+        
+        return {
+            "success": True,
+            "message": "Order confirmation email sent",
+            "order_number": order_number
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send order email: {str(e)}"
+        )
+
+# Debug endpoint to check revenue issues
+@router.get("/debug/revenue-check")
+async def debug_revenue_check(db: Session = Depends(get_db)):
+    """Debug endpoint to check revenue calculation"""
+    # Get all paid orders
+    paid_orders = db.query(Order).filter(Order.payment_status == "paid").all()
+    
+    # Get all orders with their payment status
+    all_orders = db.query(Order).all()
+    
+    paid_details = []
+    for order in paid_orders:
+        paid_details.append({
+            "order_number": order.order_number,
+            "total_amount": order.total_amount,
+            "status": order.status,
+            "payment_status": order.payment_status,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "paid_at": order.paid_at.isoformat() if order.paid_at else None
+        })
+    
+    # Get successful transactions
+    successful_transactions = db.query(Transaction).filter(Transaction.status == "success").all()
+    
+    return {
+        "total_paid_orders": len(paid_orders),
+        "total_revenue_from_orders": sum(order.total_amount for order in paid_orders),
+        "total_successful_transactions": len(successful_transactions),
+        "total_revenue_from_transactions": sum(t.amount for t in successful_transactions),
+        "all_orders_count": len(all_orders),
+        "payment_status_breakdown": {
+            "paid": len([o for o in all_orders if o.payment_status == "paid"]),
+            "pending": len([o for o in all_orders if o.payment_status == "pending"]),
+            "failed": len([o for o in all_orders if o.payment_status == "failed"])
+        },
+        "paid_orders_details": paid_details
+    }

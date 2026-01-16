@@ -184,7 +184,7 @@ STRIPE_PUBLIC_KEY=pk_test_your_key
 
 # Email (Gmail example)
 SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
 SENDER_EMAIL=noreply@fashionstore.com

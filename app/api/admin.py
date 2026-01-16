@@ -299,7 +299,7 @@ async def update_order_status(
     return {"success": True, "message": f"Order status updated to {new_status}"}
 
 @router.get("/dashboard/stats")
-async def get_dashboard_stats(
+async def get_admin_dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = 465
     
     FRONTEND_URL: str = "http://localhost:3000"
     UPLOAD_DIR: str = "app/static/uploads"
