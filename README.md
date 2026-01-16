@@ -10,7 +10,7 @@ A complete fashion e-commerce platform built with FastAPI, PostgreSQL, and moder
 - Shopping Cart Management
 - Checkout System
 - Order Management with Order History
-- Payment Integration (Stripe, Bank Transfer)
+- Payment Integration (Paystack, Stripe)
 - Email Notifications
 - Admin Dashboard
 - Product Image Upload
@@ -24,56 +24,6 @@ A complete fashion e-commerce platform built with FastAPI, PostgreSQL, and moder
 - SQLAlchemy - ORM
 - Pydantic - Data validation
 - JWT - Authentication
-- Stripe - Payment processing
-
-**Frontend**
-- HTML5 / CSS3 / JavaScript
-- Bootstrap 5 - Responsive design
-- Jinja2 - Template engine
-
-## Project Structure
-
-```
-app/
-├── api/                 # API routes
-│   ├── auth.py         # Authentication endpoints
-│   ├── products.py     # Product endpoints
-│   ├── categories.py   # Category endpoints
-│   ├── cart.py         # Shopping cart endpoints
-│   ├── orders.py       # Order endpoints
-│   └── addresses.py    # Address management
-├── core/               # Core utilities
-│   ├── config.py       # Configuration
-│   ├── database.py     # Database setup
-│   └── security.py     # Security utilities
-├── models/             # Database models
-│   └── models.py       # SQLAlchemy models
-├── schemas/            # Pydantic schemas
-│   └── schemas.py      # Data validation schemas
-├── services/           # Business logic
-│   ├── email_service.py    # Email handling
-│   └── payment_service.py  # Payment processing
-├── templates/          # HTML templates
-│   ├── base.html      # Base template
-│   ├── index.html     # Home page
-│   ├── products.html  # Products listing
-│   ├── product_detail.html
-│   ├── cart.html      # Shopping cart
-│   ├── checkout.html  # Checkout process
-│   ├── payment.html   # Payment page
-│   ├── order_detail.html
-│   ├── orders.html    # Order history
-│   ├── login.html     # Login page
-│   ├── register.html  # Registration page
-│   └── admin.html     # Admin dashboard
-├── static/            # Static files
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       ├── api.js     # API client
-│       └── auth.js    # Auth utilities
-└── main.py           # Application entry point
-```
 
 ## Installation & Setup
 
@@ -119,12 +69,6 @@ You'll also need to install Jinja2 for templates:
 pip install jinja2
 ```
 
-### 5. Setup PostgreSQL Database
-
-**Create database:**
-```sql
-CREATE DATABASE fashion_store;
-```
 
 **Update .env file:**
 ```bash
@@ -141,7 +85,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/fashion_store
 Update `.env` with:
 - Database URL
 - Secret key (generate one: `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
-- Stripe API keys (get from Stripe dashboard)
+- Paystack keys (get from Stripe dashboard)
 - Email credentials (SMTP)
 
 ### 7. Initialize Database
@@ -165,10 +109,9 @@ Access the application:
 - **API Docs:** http://localhost:8000/docs
 - **ReDoc:** http://localhost:8000/redoc
 
-## Configuration
 
-### Environment Variables (.env)
 
+<<<<<<< HEAD
 ```env
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/fashion_store
@@ -199,6 +142,8 @@ DEBUG=True
 ```python
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
+=======
+>>>>>>> 5fbe5b950a3a8c84f5758454f1be8b40646b1d43
 
 ## API Endpoints
 
@@ -207,24 +152,6 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 - `POST /api/auth/login` - Login and get token
 - `GET /api/auth/me` - Get current user
 
-### Products
-- `GET /api/products/` - List products (with filtering)
-- `GET /api/products/{id}` - Get product details
-- `POST /api/products/` - Create product (admin)
-- `PUT /api/products/{id}` - Update product (admin)
-- `POST /api/products/{id}/upload-image` - Upload product image
-
-### Categories
-- `GET /api/categories/` - List categories
-- `POST /api/categories/` - Create category (admin)
-- `GET /api/categories/{id}` - Get category
-
-### Shopping Cart
-- `GET /api/cart/` - Get user's cart
-- `POST /api/cart/add-item` - Add item to cart
-- `PUT /api/cart/update-item/{id}` - Update item quantity
-- `DELETE /api/cart/remove-item/{id}` - Remove from cart
-- `DELETE /api/cart/clear` - Clear entire cart
 
 ### Orders
 - `POST /api/orders/create` - Create order
@@ -233,100 +160,8 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 - `POST /api/orders/{id}/initiate-payment` - Start payment
 - `POST /api/orders/{id}/confirm-payment` - Confirm payment
 
-### Addresses
-- `GET /api/addresses/` - Get user's addresses
-- `POST /api/addresses/` - Add address
-- `GET /api/addresses/{id}` - Get address
-- `PUT /api/addresses/{id}` - Update address
-- `DELETE /api/addresses/{id}` - Delete address
-
-## Frontend Pages
-
-- **Home** - `/` - Landing page with featured products
-- **Products** - `/products` - Product listing with filters
-- **Product Detail** - `/product/{id}` - Single product view
-- **Cart** - `/cart` - Shopping cart
-- **Checkout** - `/checkout` - Order creation & address selection
-- **Payment** - `/payment/{id}` - Payment processing
-- **Orders** - `/orders` - Order history
-- **Order Detail** - `/order/{id}` - Order details
-- **Admin** - `/admin` - Admin dashboard
-- **Login** - `/login` - User login
-- **Register** - `/register` - User registration
-
-## Usage Examples
 
 ### Register & Login
-
-```javascript
-// Register
-const registerResponse = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-        full_name: 'John Doe',
-        email: 'john@example.com',
-        password: 'securepass123'
-    })
-});
-
-// Login
-const loginResponse = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-        email: 'john@example.com',
-        password: 'securepass123'
-    })
-});
-
-const token = (await loginResponse.json()).access_token;
-localStorage.setItem('access_token', token);
-```
-
-### Add to Cart
-
-```javascript
-const addResponse = await fetch('/api/cart/add-item', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-        product_id: 1,
-        quantity: 2
-    })
-});
-```
-
-### Create Order
-
-```javascript
-const orderResponse = await fetch('/api/orders/create', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-        payment_method: 'bank_transfer',
-        delivery_address_id: 1
-    })
-});
-```
-
-## Payment Integration
-
-### Stripe Setup
-1. Get API keys from [Stripe Dashboard](https://dashboard.stripe.com)
-2. Add to `.env`
-3. Stripe public key in payment.html
-
-### Bank Transfer (Nigeria)
-- Reference number auto-generated
-- Account details displayed to user
-- Manual verification required
 
 ## Email Setup
 
@@ -375,68 +210,6 @@ Access at `/admin` to:
 - Default address flag
 - Per-user
 
-## Development Tips
 
-1. **Database Migrations** - Use Alembic for production migrations
-2. **Testing** - Add pytest for unit testing
-3. **Caching** - Use Redis for cart/session caching
-4. **Logging** - Configure logging for debugging
-5. **Security** - Use HTTPS in production, update SECRET_KEY
-
-## Troubleshooting
-
-**Database Connection Error**
-```bash
-# Verify PostgreSQL is running
-# Check DATABASE_URL in .env
-# Test connection: psql -U user -d fashion_store
-```
-
-**Stripe Errors**
-- Verify API keys in .env
-- Check Stripe account status
-- Ensure amount is in correct format (cents)
-
-**Email Not Sending**
-- Enable Less Secure Apps (if using Gmail)
-- Verify SMTP credentials
-- Check firewall/email filters
-
-## Security Checklist
-
-- [ ] Change SECRET_KEY in production
-- [ ] Use environment variables for secrets
-- [ ] Enable HTTPS
-- [ ] Add rate limiting
-- [ ] Implement CSRF protection
-- [ ] Add input validation
-- [ ] Update dependencies regularly
-- [ ] Use strong password requirements
-
-## Future Enhancements
-
-- [ ] Payment gateway for Visa/bank transfers
-- [ ] Email verification
-- [ ] Wishlist/favorites
-- [ ] Product reviews & ratings
-- [ ] Coupon/discount system
-- [ ] Inventory notifications
-- [ ] SMS notifications
-- [ ] Analytics dashboard
-- [ ] Mobile app
-- [ ] Real-time notifications
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section
-2. Review API documentation at `/docs`
-3. Check logs for error messages
-
-## License
-
-This project is provided as-is for educational and development purposes.
-
----
 
 **Happy Building! 🚀**
