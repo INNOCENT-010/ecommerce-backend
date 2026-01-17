@@ -18,6 +18,7 @@ psycopg = {extras = ["binary"], version = "*"}
 alembic = "*"
 psycopg2-binary = "*"
 pydantic = "*"
+pydantic-settings = "*"
 python-jose = {extras = ["cryptography"], version = "*"}
 passlib = {extras = ["bcrypt"], version = "*"}
 supabase = "*"
