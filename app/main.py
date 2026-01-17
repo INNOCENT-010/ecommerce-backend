@@ -103,15 +103,27 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        # Local development
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
-        "skillful-creativity-production.up.railway.app",
-        "https://*vercel.app"
+        
+        # Railway backend (for API testing)
+        "https://skillful-creativity-production.up.railway.app",
+        
+        # Vercel frontend - ADD YOUR EXACT VERCEL URL HERE
+        "https://oh-polly-clone.vercel.app",  # ⬅️ REPLACE WITH YOUR VERCEL URL
+        
+        # All Vercel deployments (pattern format)
+        "https://*.vercel.app",
+        
+        # Development with IP
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_methods=["*"],  # Changed from specific list to "*"
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=600,
