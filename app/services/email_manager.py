@@ -14,8 +14,9 @@ class EmailManager:
             resend.api_key = os.getenv("RESEND_API_KEY")
             if resend.api_key:
                 self.use_resend = True
-                self.from_email = f"BLOOM G WOMEN <{os.getenv('SMTP_FROM_EMAIL', 'hello@bloomg.com')}>"
-                print("✅ Using Resend for emails")
+                # Use Resend's free domain instead of bloomg.com
+                self.from_email = "BLOOM G WOMEN <onboarding@resend.dev>"
+                print("✅ Using Resend for emails (with resend.dev domain)")
             else:
                 self.use_resend = False
                 print("⚠️ Resend API key not found, falling back to SMTP")
@@ -236,7 +237,7 @@ class EmailManager:
                     display: inline-block;
                     background: #667eea;
                     color: white;
-                    padding: 12px 30px;
+                    padding = 12px 30px;
                     text-decoration: none;
                     border-radius: 5px;
                     font-weight: bold;
