@@ -247,10 +247,9 @@ async def logout():
 
 verification_store = {}
 
-# IN app/api/auth.py - Add this import at the top
-from app.services.email_service import email_service  # Use your email service
 
-# Then update the send_verification function:
+
+
 
 @router.post("/send-verification")
 async def send_verification(
