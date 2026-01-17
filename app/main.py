@@ -113,7 +113,7 @@ app.add_middleware(
         "https://skillful-creativity-production.up.railway.app",
         
         # Vercel frontend - ADD YOUR EXACT VERCEL URL HERE
-        "https://oh-polly-clone.vercel.app",  # ⬅️ REPLACE WITH YOUR VERCEL URL
+        "https://ecommerce-frontend-2c9n.vercel.app",  # ⬅️ REPLACE WITH YOUR VERCEL URL
         
         # All Vercel deployments (pattern format)
         "https://*.vercel.app",
