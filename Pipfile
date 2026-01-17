@@ -31,3 +31,5 @@ httpx = "*"
 
 [requires]
 python_version = "3.13"
+
+resend= ">=2.0.0"
