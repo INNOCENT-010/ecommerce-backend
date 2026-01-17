@@ -1,3 +1,4 @@
+# /app/api/products.py
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -285,3 +286,78 @@ async def get_download_stats(
             for p in top_downloads
         ]
     }
+
+@router.put("/{product_id}/stock")
+async def update_product_stock(
+    product_id: int,
+    stock_update: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Update product stock in both local database and Supabase"""
+    try:
+        # Get the product from local database
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        new_stock = stock_update.get("stock")
+        if new_stock is None or new_stock < 0:
+            raise HTTPException(status_code=400, detail="Invalid stock value")
+        
+        # Update local database
+        product.stock = new_stock
+        # Note: Your Product model doesn't have updated_at field based on your code
+        # You might need to add it to your models.py if you want tracking
+        db.commit()
+        
+        # Update Supabase if credentials are available
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+        
+        if supabase_url and supabase_key:
+            try:
+                # Import Supabase client
+                from supabase import create_client, Client
+                
+                supabase: Client = create_client(supabase_url, supabase_key)
+                
+                # Update Supabase - try string ID first
+                supabase_response = supabase.table("products")\
+                    .update({
+                        "stock": new_stock,
+                        "updated_at": datetime.utcnow().isoformat()
+                    })\
+                    .eq("id", str(product_id))\
+                    .execute()
+                
+                if not supabase_response.data:
+                    # Try with integer ID if string doesn't work
+                    supabase.table("products")\
+                        .update({
+                            "stock": new_stock,
+                            "updated_at": datetime.utcnow().isoformat()
+                        })\
+                        .eq("id", product_id)\
+                        .execute()
+                
+            except ImportError:
+                print("Supabase client not available")
+            except Exception as e:
+                print(f"Failed to update Supabase: {str(e)}")
+        
+        return {
+            "success": True,
+            "message": "Stock updated successfully",
+            "product_id": product_id,
+            "stock": new_stock
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating stock: {str(e)}"
+        )
