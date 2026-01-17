@@ -10,7 +10,8 @@ fastapi = "*"
 uvicorn = "*"
 sqlalchemy = "*"
 python-dotenv = "*"
-jose = "*"
+
+
 pyjwt = "*"
 pillow = "*"
 stripe = "*"
@@ -22,6 +23,7 @@ pydantic-settings = "*"
 python-jose = {extras = ["cryptography"], version = "*"}
 passlib = {extras = ["bcrypt"], version = "*"}
 supabase = "*"
+email-Validator = "*"
 
 [dev-packages]
 pytest = "*"
