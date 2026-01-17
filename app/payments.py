@@ -21,7 +21,7 @@ load_dotenv()
 
 from app.core.database import get_db
 from app.models.models import Order, Transaction, OrderItem, Address, User, Product
-from app.services.email_service import email_service
+from app.services.email_manager import email_manager as email_service
 from sqlalchemy.orm import joinedload
 
 SUPABASE_URL = settings.SUPABASE_URL

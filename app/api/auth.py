@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import random
 import string
-from app.services.email_service import email_service
+from app.services.email_manager import email_manager as email_service
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token, get_current_user
 from app.core.config import settings

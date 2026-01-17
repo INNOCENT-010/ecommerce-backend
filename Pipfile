@@ -10,20 +10,18 @@ fastapi = "*"
 uvicorn = "*"
 sqlalchemy = "*"
 python-dotenv = "*"
-
-
 pyjwt = "*"
 pillow = "*"
 stripe = "*"
 psycopg = {extras = ["binary"], version = "*"}
 alembic = "*"
 psycopg2-binary = "*"
-
 pydantic-settings = "*"
 python-jose = {extras = ["cryptography"], version = "*"}
 passlib = {extras = ["bcrypt"], version = "*"}
 supabase = "*"
 email-Validator = "*"
+resend = "*"
 
 [dev-packages]
 pytest = "*"
@@ -31,5 +29,4 @@ httpx = "*"
 
 [requires]
 python_version = "3.13"
-
 resend= ">=2.0.0"
