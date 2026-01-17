@@ -1,4 +1,4 @@
-# app/services/email_service.py - UPDATED TO USE SETTINGS
+# app/services/email_service.py - UPDATED FOR PORT 587 WITH STARTTLS
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -17,7 +17,7 @@ class EmailService:
     def __init__(self):
         # Use settings instead of os.getenv()
         self.smtp_host = settings.SMTP_HOST
-        self.smtp_port = settings.SMTP_PORT  # This will be 465
+        self.smtp_port = settings.SMTP_PORT  # This will be 587
         self.smtp_user = settings.SMTP_USER
         self.smtp_password = settings.SMTP_PASSWORD
         self.from_name = settings.SMTP_FROM_NAME
@@ -36,7 +36,7 @@ class EmailService:
                 print(f"⚠️ SMTP credentials missing. Would send email to {to_email} with subject: {subject}")
                 return False
             
-            print(f"📧 Attempting to send email via port {self.smtp_port}...")
+            print(f"📧 Attempting to send email via {self.smtp_host}:{self.smtp_port}...")
             print(f"  To: {to_email}")
             print(f"  From: {self.from_name} <{self.from_email}>")
             
@@ -49,18 +49,37 @@ class EmailService:
                 msg.attach(MIMEText(text_content, 'plain'))
             msg.attach(MIMEText(html_content, 'html'))
             
-            # Use SMTP_SSL for port 465
+            # Handle different ports - ONLY CHANGED THIS SECTION
             if self.smtp_port == 465:
+                # Keep existing SSL logic for port 465
                 with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as server:
                     print(f"🔐 Using SSL encryption (port 465)...")
                     server.login(self.smtp_user, self.smtp_password)
                     server.send_message(msg)
-            else:
-                # Fallback to port 587 with STARTTLS
+            elif self.smtp_port == 587:
+                # NEW: Port 587 with STARTTLS
                 with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                    print(f"🔐 Using STARTTLS (port {self.smtp_port})...")
-                    server.starttls()
+                    print(f"🔐 Using STARTTLS (port 587)...")
+                    server.ehlo()  # Identify ourselves to the SMTP server
+                    server.starttls()  # Upgrade to secure connection
+                    server.ehlo()  # Re-identify ourselves after TLS
                     server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+            else:
+                # Fallback for other ports
+                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                    print(f"🔐 Using port {self.smtp_port}...")
+                    if self.smtp_port == 25 or self.smtp_port == 2525:
+                        # Some services use unencrypted or alternative ports
+                        server.login(self.smtp_user, self.smtp_password)
+                    else:
+                        # Try STARTTLS if available
+                        try:
+                            server.starttls()
+                            server.login(self.smtp_user, self.smtp_password)
+                        except:
+                            # Fallback to plain login if STARTTLS fails
+                            server.login(self.smtp_user, self.smtp_password)
                     server.send_message(msg)
             
             logger.info(f"Email sent to {to_email}")
@@ -72,6 +91,7 @@ class EmailService:
             print(f"❌ Failed to send email to {to_email}: {str(e)}")
             return False
     
+    # KEEP ALL EXISTING METHODS EXACTLY AS THEY ARE
     def send_verification_code(self, to_email: str, code: str) -> bool:
         """Send verification code email"""
         html_template = """
