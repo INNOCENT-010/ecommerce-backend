@@ -20,8 +20,8 @@ class EmailService:
         self.smtp_port = settings.SMTP_PORT  # This will be 465
         self.smtp_user = settings.SMTP_USER
         self.smtp_password = settings.SMTP_PASSWORD
-        self.from_name = "BLOOM&G Store"  # Hardcode or add to settings
-        self.from_email = "noreply@bloomg.com"  # Hardcode or add to settings
+        self.from_name = settings.SMTP_FROM_NAME
+        self.from_email = settings.SMTP_FROM_EMAIL
         
     def send_email(
         self,
