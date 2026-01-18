@@ -1,4 +1,3 @@
-# app/payments.py - CORRECTED VERSION
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -8,11 +7,13 @@ import hashlib
 import hmac
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
 import csv
 import io
+import threading
+import time
 
 from app.core.config import settings
 from app.schemas.order import OrderCreate, PaystackInitializeResponse
@@ -113,71 +114,299 @@ def parse_datetime(date_string: str):
             return None
     except (ValueError, TypeError, AttributeError):
         return None
-
-# In your payments.py, improve the update_product_stock_on_order function:
-
 def update_product_stock_on_order(db: Session, order_id: int):
+    """Update stock when an order is paid - FIXED VERSION"""
     try:
         order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
         
         if not order_items:
+            print(f"⚠️ No items found for order {order_id}")
             return
         
-        if not SUPABASE_URL or not SUPABASE_KEY:
-            # Update only local database if Supabase credentials missing
-            for item in order_items:
-                local_product = db.query(Product).filter(Product.id == item.product_id).first()
-                if local_product:
-                    local_product.stock = max(0, local_product.stock - item.quantity)
-            db.commit()
-            return
+        print(f"🔄 Processing stock update for order {order_id} with {len(order_items)} items")
         
-        try:
-            from supabase import create_client, Client
-            
-            supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-            
-            # Batch process all items
-            for item in order_items:
-                # First update local database
-                local_product = db.query(Product).filter(Product.id == item.product_id).first()
-                if local_product:
-                    new_stock = max(0, local_product.stock - item.quantity)
-                    local_product.stock = new_stock
-                
-                # Then update Supabase
-                try:
-                    # Use upsert to ensure the product exists in Supabase
-                    supabase.table("products")\
-                        .update({
-                            "stock": max(0, local_product.stock if local_product else 0 - item.quantity),
-                            "updated_at": datetime.utcnow().isoformat()
-                        })\
-                        .eq("id", str(item.product_id))\
-                        .execute()
-                    
-                    print(f"Updated stock for product {item.product_id}: -{item.quantity}")
-                    
-                except Exception as supabase_error:
-                    print(f"Supabase update failed for product {item.product_id}: {supabase_error}")
-                    # Continue with other products even if one fails
-            
-            db.commit()
-            print(f"Successfully updated stock for order {order_id}")
-            
-        except Exception as e:
-            print(f"Supabase update failed, updating only local database: {e}")
-            # Fallback: Update only local database
-            for item in order_items:
-                local_product = db.query(Product).filter(Product.id == item.product_id).first()
-                if local_product:
-                    local_product.stock = max(0, local_product.stock - item.quantity)
-            db.commit()
+        # Update local database first (immediate)
+        for item in order_items:
+            product = db.query(Product).filter(Product.id == item.product_id).first()
+            if product:
+                old_stock = product.stock
+                new_stock = max(0, old_stock - item.quantity)
+                product.stock = new_stock
+                print(f"📦 Local DB: Product {product.id} stock: {old_stock} → {new_stock} (-{item.quantity})")
+        
+        db.commit()
+        print(f"✅ Local database updated for order {order_id}")
+        
+        # Update Supabase in background if credentials are available
+        if SUPABASE_URL and SUPABASE_KEY:
+            print(f"🚀 Starting Supabase background sync for order {order_id}")
+            threading.Thread(
+                target=_sync_stock_to_supabase,
+                args=(order_items,),
+                daemon=True
+            ).start()
+        else:
+            print("⚠️ Supabase credentials missing, skipping Supabase update")
             
     except Exception as e:
-        print(f"Error in update_product_stock_on_order: {e}")
         db.rollback()
+        print(f"❌ Failed to update stock for order {order_id}: {e}")
+        import traceback
+        traceback.print_exc()
         raise
+
+def _sync_stock_to_supabase(order_items):
+    """Background thread to sync stock to Supabase"""
+    try:
+        # Give a small delay to ensure local DB commit is complete
+        time.sleep(1)
+        
+        from supabase import create_client
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        
+        print(f"🔄 Supabase sync started for {len(order_items)} items")
+        
+        for item in order_items:
+            try:
+                product_id_str = str(item.product_id)
+                
+                # First, try to get current stock from Supabase
+                try:
+                    response = supabase.table("products")\
+                        .select("id, name, stock")\
+                        .eq("id", product_id_str)\
+                        .single()\
+                        .execute()
+                    
+                    if response.data:
+                        current_stock = response.data.get('stock', 0)
+                        new_stock = max(0, current_stock - item.quantity)
+                        
+                        # Update Supabase
+                        update_response = supabase.table("products")\
+                            .update({
+                                "stock": new_stock,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            })\
+                            .eq("id", product_id_str)\
+                            .execute()
+                        
+                        print(f"✅ Supabase: Product {product_id_str} updated to {new_stock} (-{item.quantity})")
+                    else:
+                        print(f"⚠️ Product {product_id_str} not found in Supabase")
+                        
+                except Exception as fetch_error:
+                    # Product might not exist or other error - try direct update
+                    print(f"⚠️ Could not fetch product {product_id_str} from Supabase: {fetch_error}")
+                    
+                    # Try direct update assuming we know the stock should be reduced
+                    try:
+                        # This is a fallback - try to decrement stock directly
+                        update_response = supabase.table("products")\
+                            .update({
+                                "stock": supabase.table("products")
+                                    .select("stock")
+                                    .eq("id", product_id_str)
+                                    .single()
+                                    .execute()
+                                    .data.get('stock', 0) - item.quantity,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            })\
+                            .eq("id", product_id_str)\
+                            .execute()
+                        print(f"✅ Used fallback update for product {product_id_str}")
+                    except Exception as fallback_error:
+                        print(f"❌ Fallback also failed for product {product_id_str}: {fallback_error}")
+                        
+            except Exception as item_error:
+                print(f"❌ Error processing product {item.product_id}: {item_error}")
+                continue  # Continue with next item even if one fails
+        
+        print(f"🎉 Supabase sync completed")
+        
+    except ImportError:
+        print("❌ Supabase client not available")
+    except Exception as e:
+        print(f"❌ Supabase sync failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Add these debugging and sync endpoints:
+
+@router.post("/debug/update-stock/{product_id}")
+async def debug_update_stock(
+    product_id: str,
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """Debug endpoint to manually update stock and see what happens"""
+    try:
+        new_stock = request.get('stock')
+        if new_stock is None:
+            return {"success": False, "message": "Stock value required"}
+        
+        # Update local DB
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            return {"success": False, "message": f"Product {product_id} not found in local DB"}
+        
+        old_stock = product.stock
+        product.stock = new_stock
+        db.commit()
+        
+        # Try to update Supabase
+        supabase_updated = False
+        supabase_error = None
+        
+        if SUPABASE_URL and SUPABASE_KEY:
+            try:
+                from supabase import create_client
+                supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+                
+                response = supabase.table("products")\
+                    .update({
+                        "stock": new_stock,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })\
+                    .eq("id", product_id)\
+                    .execute()
+                
+                supabase_updated = True
+                print(f"✅ Debug: Manually updated product {product_id} to {new_stock}")
+                
+            except Exception as e:
+                supabase_error = str(e)
+                print(f"❌ Debug: Supabase update failed: {e}")
+        
+        return {
+            "success": True,
+            "message": "Stock updated",
+            "data": {
+                "product_id": product_id,
+                "old_stock": old_stock,
+                "new_stock": new_stock,
+                "local_updated": True,
+                "supabase_updated": supabase_updated,
+                "supabase_error": supabase_error,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": f"Debug update failed: {str(e)}"}
+
+@router.get("/debug/check-stock/{product_id}")
+async def debug_check_stock(product_id: str, db: Session = Depends(get_db)):
+    """Check stock in both databases"""
+    
+    # Check local database
+    product = db.query(Product).filter(Product.id == product_id).first()
+    local_stock = product.stock if product else None
+    
+    # Check Supabase
+    supabase_stock = None
+    supabase_error = None
+    
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            from supabase import create_client
+            supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+            
+            response = supabase.table("products")\
+                .select("id, name, stock, updated_at")\
+                .eq("id", product_id)\
+                .single()\
+                .execute()
+            
+            if response.data:
+                supabase_stock = response.data.get('stock')
+                supabase_updated = response.data.get('updated_at')
+            else:
+                supabase_error = "Product not found in Supabase"
+                
+        except Exception as e:
+            supabase_error = str(e)
+    
+    return {
+        "product_id": product_id,
+        "local": {
+            "stock": local_stock,
+            "name": product.name if product else None
+        },
+        "supabase": {
+            "stock": supabase_stock,
+            "updated_at": supabase_updated if 'supabase_updated' in locals() else None,
+            "error": supabase_error
+        },
+        "match": local_stock == supabase_stock if local_stock is not None and supabase_stock is not None else "N/A",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@router.post("/sync-all-stock")
+async def sync_all_stock(db: Session = Depends(get_db)):
+    """Force sync all product stock from local DB to Supabase"""
+    try:
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            return {"success": False, "message": "Supabase credentials not configured"}
+        
+        from supabase import create_client
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        
+        # Get all products from local database
+        local_products = db.query(Product).all()
+        
+        synced_count = 0
+        failed_count = 0
+        results = []
+        
+        for product in local_products:
+            try:
+                
+                response = supabase.table("products")\
+                    .update({
+                        "stock": product.stock,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })\
+                    .eq("id", str(product.id))\
+                    .execute()
+                
+                if response.data:
+                    synced_count += 1
+                    results.append({
+                        "product_id": product.id,
+                        "name": product.name,
+                        "stock": product.stock,
+                        "status": "synced"
+                    })
+                else:
+                    failed_count += 1
+                    results.append({
+                        "product_id": product.id,
+                        "name": product.name,
+                        "status": "failed - no response"
+                    })
+                    
+            except Exception as e:
+                failed_count += 1
+                results.append({
+                    "product_id": product.id,
+                    "name": product.name,
+                    "status": f"failed - {str(e)}"
+                })
+        
+        return {
+            "success": True,
+            "message": f"Sync completed: {synced_count} successful, {failed_count} failed",
+            "total_products": len(local_products),
+            "synced_count": synced_count,
+            "failed_count": failed_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": f"Sync failed: {str(e)}"}
+
+
 
 @router.get("/transactions")
 async def get_transactions(
