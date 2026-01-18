@@ -114,6 +114,8 @@ def parse_datetime(date_string: str):
     except (ValueError, TypeError, AttributeError):
         return None
 
+# In your payments.py, improve the update_product_stock_on_order function:
+
 def update_product_stock_on_order(db: Session, order_id: int):
     try:
         order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
@@ -122,6 +124,7 @@ def update_product_stock_on_order(db: Session, order_id: int):
             return
         
         if not SUPABASE_URL or not SUPABASE_KEY:
+            # Update only local database if Supabase credentials missing
             for item in order_items:
                 local_product = db.query(Product).filter(Product.id == item.product_id).first()
                 if local_product:
@@ -134,61 +137,47 @@ def update_product_stock_on_order(db: Session, order_id: int):
             
             supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
             
+            # Batch process all items
             for item in order_items:
+                # First update local database
+                local_product = db.query(Product).filter(Product.id == item.product_id).first()
+                if local_product:
+                    new_stock = max(0, local_product.stock - item.quantity)
+                    local_product.stock = new_stock
+                
+                # Then update Supabase
                 try:
-                    response = supabase.table("products")\
-                        .select("id, name, stock, sku")\
-                        .eq("id", str(item.product_id))\
-                        .execute()
-                    
-                    if not response.data or len(response.data) == 0:
-                        response = supabase.table("products")\
-                            .select("id, name, stock, sku")\
-                            .eq("id", item.product_id)\
-                            .execute()
-                        
-                        if not response.data or len(response.data) == 0:
-                            continue
-                    
-                    product_data = response.data[0]
-                    current_stock = product_data.get("stock", 0)
-                    
-                    new_stock = current_stock - item.quantity
-                    if new_stock < 0:
-                        new_stock = 0
-                    
+                    # Use upsert to ensure the product exists in Supabase
                     supabase.table("products")\
                         .update({
-                            "stock": new_stock,
+                            "stock": max(0, local_product.stock if local_product else 0 - item.quantity),
                             "updated_at": datetime.utcnow().isoformat()
                         })\
                         .eq("id", str(item.product_id))\
                         .execute()
                     
-                    local_product = db.query(Product).filter(Product.id == item.product_id).first()
-                    if local_product:
-                        local_product.stock = new_stock
-                        
-                except Exception:
-                    continue
+                    print(f"Updated stock for product {item.product_id}: -{item.quantity}")
+                    
+                except Exception as supabase_error:
+                    print(f"Supabase update failed for product {item.product_id}: {supabase_error}")
+                    # Continue with other products even if one fails
             
             db.commit()
+            print(f"Successfully updated stock for order {order_id}")
             
-        except ImportError:
+        except Exception as e:
+            print(f"Supabase update failed, updating only local database: {e}")
+            # Fallback: Update only local database
             for item in order_items:
                 local_product = db.query(Product).filter(Product.id == item.product_id).first()
                 if local_product:
                     local_product.stock = max(0, local_product.stock - item.quantity)
             db.commit()
-        except Exception:
-            for item in order_items:
-                local_product = db.query(Product).filter(Product.id == item.product_id).first()
-                if local_product:
-                    local_product.stock = max(0, local_product.stock - item.quantity)
-            db.commit()
             
-    except Exception:
+    except Exception as e:
+        print(f"Error in update_product_stock_on_order: {e}")
         db.rollback()
+        raise
 
 @router.get("/transactions")
 async def get_transactions(
